@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Schedule Builder — Bahrain Polytechnic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="crest">SB</div>
+    <div class="masthead-text">
+      <h1>Schedule Builder</h1>
+      <p class="subtitle">Bahrain Polytechnic — unofficial, browses the public class search</p>
+    </div>
+    <div class="session-status" id="sessionStatus">
+      <span class="dot" id="sessionDot"></span>
+      <span id="sessionLabel">connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="panel" id="termPanel">
+    <h2><span class="step-no">01</span> Term</h2>
+    <div class="row">
+      <select id="termSelect"><option>Loading terms…</option></select>
+      <button id="termLoadBtn" class="btn btn-primary">Use this term</button>
+      <span class="hint" id="termHint"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="addCoursePanel" style="display:none;">
+    <h2><span class="step-no">02</span> Add a course you need</h2>
+    <div class="row wrap">
+      <select id="subjectSelect"><option value="">All subjects…</option></select>
+      <input id="courseNumberInput" placeholder="Course number (e.g. 1201)" />
+      <input id="titleInput" placeholder="or search by title keyword" />
+      <button id="findSectionsBtn" class="btn btn-primary">Find sections</button>
+    </div>
+    <p class="hint">Leave course number and keyword blank to browse everything in a subject.</p>
+    <div id="searchResults"></div>
+  </section>
+
+  <section class="panel" id="requirementsPanel" style="display:none;">
+    <h2><span class="step-no">03</span> Your courses</h2>
+    <div id="requirementsList"></div>
+  </section>
+
+  <section class="panel" id="generatePanel" style="display:none;">
+    <h2><span class="step-no">04</span> Build schedules</h2>
+    <div class="row">
+      <label for="sortSelect" class="hint">Rank by:</label>
+      <select id="sortSelect">
+        <option value="compact">Fewest gaps between classes</option>
+        <option value="earliest">Earliest finish each day</option>
+        <option value="latest">Latest start each day</option>
+        <option value="fewdays">Fewest days on campus</option>
+      </select>
+      <button id="generateBtn" class="btn btn-primary btn-lg">Generate schedules</button>
+    </div>
+    <div id="generateStatus" class="hint"></div>
+  </section>
+
+  <section class="panel" id="resultsPanel" style="display:none;">
+    <h2><span class="step-no">05</span> Options</h2>
+    <div id="resultsMeta" class="hint"></div>
+    <div id="resultsTabs" class="tabs"></div>
+    <div id="resultsGrid"></div>
+  </section>
+
+  <section class="panel" id="debugPanel">
+    <h2>Technical log</h2>
+    <p class="hint">If something doesn't work, this is what to send back for a fix — it shows exactly what the server sent to Banner and what came back.</p>
+    <pre id="debugLog"></pre>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "polytechnic-schedule-builder",
+  "version": "1.0.0",
+  "description": "Local tool to browse Bahrain Polytechnic Banner class sections and build conflict-free schedules with pinned/preferred class times.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
