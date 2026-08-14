@@ -15,13 +15,68 @@
 // are contacted except ban-reg.polytechnic.bh.
 
 const express = require("express");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const path = require("path");
 
 const BASE = "https://ban-reg.polytechnic.bh/StudentRegistrationSsb/ssb";
 
 const app = express();
+app.disable("x-powered-by");
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:"],
+      },
+    },
+  })
+);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// --- basic hardening on the proxy routes -----------------------------------
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests — slow down a little." },
+});
+app.use("/api", apiLimiter);
+
+// Only letters and digits are valid for term/subject/courseNumber.
+function isAlphaNum(value) {
+  return typeof value === "string" && /^[A-Za-z0-9]+$/.test(value);
+}
+function isFreeText(value) {
+  return typeof value === "string" && /^[A-Za-z0-9 ]*$/.test(value);
+}
+function rejectBadParams(required, optional) {
+  return (req, res, next) => {
+    for (const key of required) {
+      const v = req.query[key] ?? req.body?.[key];
+      if (v === undefined || v === "" || !isAlphaNum(v)) {
+        return res
+          .status(400)
+          .json({ error: `Invalid ${key}: letters and numbers only, please.` });
+      }
+    }
+    for (const key of optional || []) {
+      const v = req.query[key];
+      if (v !== undefined && v !== "" && !isFreeText(v)) {
+        return res
+          .status(400)
+          .json({ error: `Invalid ${key}: letters and numbers only, please.` });
+      }
+    }
+    next();
+  };
+}
 
 // --- tiny in-memory cookie jar -------------------------------------------
 // Banner ties "which term did you select" to a session cookie. Since this
@@ -99,7 +154,7 @@ app.get("/api/terms", async (req, res) => {
 });
 
 // Select a term for the session (must be called before subjects/sections)
-app.post("/api/term", async (req, res) => {
+app.post("/api/term", rejectBadParams(["term"]), async (req, res) => {
   try {
     const { term } = req.body;
     if (!term) return res.status(400).json({ error: "term is required" });
@@ -131,7 +186,7 @@ app.post("/api/term", async (req, res) => {
 });
 
 // List subjects for the currently selected term
-app.get("/api/subjects", async (req, res) => {
+app.get("/api/subjects", rejectBadParams(["term"]), async (req, res) => {
   try {
     const term = req.query.term;
     if (!term) return res.status(400).json({ error: "term is required" });
@@ -156,7 +211,10 @@ app.get("/api/subjects", async (req, res) => {
 });
 
 // Search sections. Query: term, subject, courseNumber (optional), title (optional keyword)
-app.get("/api/sections", async (req, res) => {
+app.get(
+  "/api/sections",
+  rejectBadParams(["term"], ["subject", "courseNumber", "title"]),
+  async (req, res) => {
   try {
     const { term, subject, courseNumber, title } = req.query;
     if (!term) return res.status(400).json({ error: "term is required" });
