@@ -409,8 +409,10 @@ function renderCourseGroup(group) {
   const head = document.createElement("div");
   head.className = "course-group-head";
   head.innerHTML = `
-    <button type="button" class="collapse-toggle" aria-expanded="false" title="Show/hide sections">▸</button>
-    <span class="course-title"><span class="code">${group.subject} ${group.courseNumber}</span>${group.courseTitle || ""}</span>
+    <span class="row" style="gap:6px;min-width:0;">
+      <button type="button" class="collapse-toggle" aria-expanded="false" title="Show/hide sections">▸</button>
+      <span class="course-title"><span class="code">${group.subject} ${group.courseNumber}</span>${group.courseTitle || ""}</span>
+    </span>
     <span class="row" style="gap:8px;">
       <span class="hint" style="margin:0;color:#ccc;">${group.sections.length} section(s)</span>
       <button type="button" class="btn btn-header btn-small select-all-btn">Select all</button>
