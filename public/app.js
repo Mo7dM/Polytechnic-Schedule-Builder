@@ -226,6 +226,11 @@ function creditsLabel(combo) {
   return `${totalCredits(combo)} CH`;
 }
 
+function daysLabel(combo) {
+  const days = dailyIntervals(combo).filter(list => list.length).length;
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 // ---------- app state ---------------------------------------------------------
 
 let terms = [];
@@ -539,16 +544,25 @@ function generateSchedules() {
     return;
   }
 
-  const results = [];
-  const MAX_RESULTS = 300;
+  const modes = selectedSortModes();
+  if (modes.length === 0) {
+    $("#generateStatus").textContent = "Pick at least one ranking criterion above.";
+    setBusy(btn, false);
+    return;
+  }
+
+  // Collect every conflict-free combo found (bounded only by exploration work),
+  // then keep the best KEEP by the primary criterion so a good combo is never
+  // dropped just because it was explored after 300 worse ones.
+  const found = [];
   const MAX_EXPLORED = 200000;
   let explored = 0;
 
   function backtrack(idx, chosen) {
-    if (results.length >= MAX_RESULTS || explored > MAX_EXPLORED) return;
+    if (explored > MAX_EXPLORED) return;
     explored += 1;
     if (idx === pools.length) {
-      results.push([...chosen]);
+      found.push([...chosen]);
       return;
     }
     for (const candidate of pools[idx]) {
@@ -560,31 +574,29 @@ function generateSchedules() {
         chosen.push(candidate);
         backtrack(idx + 1, chosen);
         chosen.pop();
-        if (results.length >= MAX_RESULTS) return;
       }
     }
   }
   backtrack(0, []);
 
-  if (results.length === 0) {
+  if (found.length === 0) {
     $("#generateStatus").textContent = "No conflict-free combination exists with the current sections/pins. Try un-pinning a class or including more sections.";
     $("#resultsPanel").style.display = "none";
     setBusy(btn, false);
     return;
   }
 
-  const modes = selectedSortModes();
-  if (modes.length === 0) {
-    $("#generateStatus").textContent = "Pick at least one ranking criterion above.";
-    setBusy(btn, false);
-    return;
-  }
+  const KEEP = 2000;
+  const primary = modes[0];
+  const withKey = found.map(combo => ({ combo, key: scoreCombo(combo, primary) }));
+  withKey.sort((a, b) => a.key - b.key);
+  const kept = withKey.slice(0, KEEP).map(o => o.combo);
 
-  const raw = results.map(combo => modes.map(m => scoreCombo(combo, m)));
+  const raw = kept.map(combo => modes.map(m => scoreCombo(combo, m)));
   const mins = modes.map((_, i) => Math.min(...raw.map(r => r[i])));
   const maxs = modes.map((_, i) => Math.max(...raw.map(r => r[i])));
   const scored = raw.map((scores, idx) => ({
-    combo: results[idx],
+    combo: kept[idx],
     score: scores.reduce((acc, s, i) => {
       const span = maxs[i] - mins[i];
       return acc + (span > 0 ? (s - mins[i]) / span : 0);
@@ -593,7 +605,7 @@ function generateSchedules() {
   scored.sort((a, b) => a.score - b.score);
 
   lastResults = scored.map(s => s.combo);
-  $("#generateStatus").textContent = `${results.length} valid combination(s) found${explored > MAX_EXPLORED ? " (search capped — narrow your options for a full count)" : ""}.`;
+  $("#generateStatus").textContent = `${found.length} valid combination(s) found${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
   setBusy(btn, false);
   renderResults();
 }
@@ -611,14 +623,23 @@ function dailyIntervals(combo) {
 function scoreCombo(combo, mode) {
   const byDay = dailyIntervals(combo);
   if (mode === "compact") {
+    // Fewest gap minutes first; days on campus only as a soft tiebreaker
+    // (10 min/day) so a 3-day no-gap week outranks a 5-day no-gap week
+    // without overriding schedules that genuinely have tighter gaps.
+    // Gaps of 15 minutes or less count as back-to-back (no break) so a
+    // normal change-between-classes doesn't look like a real gap.
+    const NO_BREAK_TOLERANCE = 15;
     let gap = 0;
+    let days = 0;
     byDay.forEach(list => {
+      if (list.length === 0) return;
+      days += 1;
       for (let i = 1; i < list.length; i++) {
         const g = list[i].start - list[i - 1].end;
-        if (g > 0) gap += g;
+        if (g > NO_BREAK_TOLERANCE) gap += g - NO_BREAK_TOLERANCE;
       }
     });
-    return gap;
+    return gap + days * 10;
   }
   if (mode === "earliest") {
     let total = 0, count = 0;
@@ -648,7 +669,7 @@ function renderResults() {
   shown.forEach((combo, i) => {
     const b = document.createElement("button");
     b.className = "tab-btn" + (i === 0 ? " active" : "");
-    b.textContent = `Option ${i + 1} · ${creditsLabel(combo)}`;
+    b.textContent = `Option ${i + 1} · ${daysLabel(combo)} · ${creditsLabel(combo)}`;
     b.onclick = () => {
       [...tabs.children].forEach(c => c.classList.remove("active"));
       b.classList.add("active");
