@@ -93,11 +93,20 @@ function selectedSortModes() {
   return [...document.querySelectorAll(".rank-opt input:checked")].map(cb => cb.value);
 }
 
+function blockedDays() {
+  return new Set([...document.querySelectorAll(".day-chip.off")].map(chip => Number(chip.dataset.day)));
+}
+
+function sectionMeetsOn(sec, dayIdx) {
+  return sec.meetings.some(m => m.days[dayIdx] && m.start != null);
+}
+
 function saveState() {
   try {
     const data = {
       selectedTerm,
       sort: selectedSortModes(),
+      skipDays: [...blockedDays()],
       requirements: serializeRequirements(),
     };
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
@@ -119,6 +128,11 @@ function restoreState() {
     });
   }
   if (saved.selectedTerm) selectedTerm = saved.selectedTerm;
+  if (Array.isArray(saved.skipDays)) {
+    document.querySelectorAll(".day-chip").forEach(chip => {
+      chip.classList.toggle("off", saved.skipDays.includes(Number(chip.dataset.day)));
+    });
+  }
   if (Array.isArray(saved.requirements) && saved.requirements.length) {
     requirements = saved.requirements.map(r => ({
       ...r,
@@ -395,7 +409,8 @@ function renderCourseGroup(group) {
   const head = document.createElement("div");
   head.className = "course-group-head";
   head.innerHTML = `
-    <span><span class="code">${group.subject} ${group.courseNumber}</span>${group.courseTitle || ""}</span>
+    <button type="button" class="collapse-toggle" aria-expanded="false" title="Show/hide sections">▸</button>
+    <span class="course-title"><span class="code">${group.subject} ${group.courseNumber}</span>${group.courseTitle || ""}</span>
     <span class="row" style="gap:8px;">
       <span class="hint" style="margin:0;color:#ccc;">${group.sections.length} section(s)</span>
       <button type="button" class="btn btn-header btn-small select-all-btn">Select all</button>
@@ -403,6 +418,10 @@ function renderCourseGroup(group) {
     </span>
   `;
   wrap.appendChild(head);
+
+  const list = document.createElement("div");
+  list.className = "section-list";
+  list.hidden = true;
 
   group.sections.forEach(sec => {
     const row = document.createElement("div");
@@ -416,8 +435,17 @@ function renderCourseGroup(group) {
       <span class="seats${isFull ? " full" : ""}">${isFull ? '<span class="full-badge">FULL</span>waitlist ok' : (sec.seatsAvailable != null ? sec.seatsAvailable + " seats" : "")}</span>
     `;
     row._section = sec;
-    wrap.appendChild(row);
+    list.appendChild(row);
   });
+  wrap.appendChild(list);
+
+  const toggle = head.querySelector(".collapse-toggle");
+  toggle.onclick = () => {
+    const expand = list.hidden;
+    list.hidden = !expand;
+    toggle.textContent = expand ? "▾" : "▸";
+    toggle.setAttribute("aria-expanded", String(expand));
+  };
 
   const btn = document.createElement("button");
   btn.className = "btn btn-black btn-small add-course-btn";
@@ -526,20 +554,32 @@ function generateSchedules() {
   setBusy(btn, true, "building&hellip;");
   $("#generateStatus").textContent = "Building&hellip;";
 
+  const skip = blockedDays();
+
   const pools = requirements.map(req => {
     if (req.anchor) {
       const s = req.sections.find(sec => sec.crn === req.anchor);
+      if (s && skip.size) {
+        // A pinned section still respects skipped days.
+        for (const d of skip) if (sectionMeetsOn(s, d)) return [];
+      }
       return [s]; // a pinned section is included even if its time is TBA/arranged
     }
     let candidates = req.sections.filter(s => req.included.has(s.crn));
     if (req.pinDoctor) {
       candidates = candidates.filter(s => s.instructor === req.pinDoctor);
     }
-    return candidates.filter(hasScheduledMeeting); // TBA/arranged sections aren't usable unless pinned
+    candidates = candidates.filter(hasScheduledMeeting); // TBA/arranged sections aren't usable unless pinned
+    if (skip.size) {
+      candidates = candidates.filter(s => ![...skip].some(d => sectionMeetsOn(s, d)));
+    }
+    return candidates;
   });
 
   if (pools.some(p => p.length === 0)) {
-    $("#generateStatus").textContent = "One of your courses has no timed (non-TBA) sections in play. Pin a specific section to include it even if its time is TBA, or adjust your pins above.";
+    $("#generateStatus").textContent = skip.size
+      ? "Every option for one of your courses falls on a skipped day. Clear a skipped day or pin a section that works around it."
+      : "One of your courses has no timed (non-TBA) sections in play. Pin a specific section to include it even if its time is TBA, or adjust your pins above.";
     setBusy(btn, false);
     return;
   }
@@ -580,7 +620,9 @@ function generateSchedules() {
   backtrack(0, []);
 
   if (found.length === 0) {
-    $("#generateStatus").textContent = "No conflict-free combination exists with the current sections/pins. Try un-pinning a class or including more sections.";
+    $("#generateStatus").textContent = blockedDays().size
+      ? "No conflict-free combination exists avoiding your skipped days. Clear a skipped day or include more sections."
+      : "No conflict-free combination exists with the current sections/pins. Try un-pinning a class or including more sections.";
     $("#resultsPanel").style.display = "none";
     setBusy(btn, false);
     return;
@@ -605,7 +647,8 @@ function generateSchedules() {
   scored.sort((a, b) => a.score - b.score);
 
   lastResults = scored.map(s => s.combo);
-  $("#generateStatus").textContent = `${found.length} valid combination(s) found${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
+  const skipNote = blockedDays().size ? ` — skipping ${[...blockedDays()].map(d => DAY_KEYS[d]).join(", ")}` : "";
+  $("#generateStatus").textContent = `${found.length} valid combination(s) found${skipNote}${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
   setBusy(btn, false);
   renderResults();
 }
@@ -908,6 +951,10 @@ $("#generateBtn").onclick = generateSchedules;
 $("#bannerClose").onclick = dismissBanner;
 $("#copyTextBtn").onclick = copyScheduleText;
 document.querySelectorAll(".rank-opt input").forEach(cb => cb.addEventListener("change", saveState));
+document.querySelectorAll(".day-chip").forEach(chip => chip.addEventListener("click", () => {
+  chip.classList.toggle("off");
+  saveState();
+}));
 $("#debugToggle").onclick = toggleDebug;
 document.getElementById("feedbackLink").href = FEEDBACK_URL;
 

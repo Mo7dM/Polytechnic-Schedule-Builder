@@ -77,9 +77,22 @@
       <label class="rank-opt"><input type="checkbox" value="earliest" /> Earliest finish each day</label>
       <label class="rank-opt"><input type="checkbox" value="latest" /> Latest start each day</label>
       <label class="rank-opt"><input type="checkbox" value="fewdays" /> Fewest days on campus</label>
+    </div>
+    <div class="row wrap day-skip-row">
+      <span class="hint" style="margin:0;">Skip days:</span>
+      <button type="button" class="day-chip" data-day="0">Sun</button>
+      <button type="button" class="day-chip" data-day="1">Mon</button>
+      <button type="button" class="day-chip" data-day="2">Tue</button>
+      <button type="button" class="day-chip" data-day="3">Wed</button>
+      <button type="button" class="day-chip" data-day="4">Thu</button>
+      <button type="button" class="day-chip" data-day="5">Fri</button>
+      <button type="button" class="day-chip" data-day="6">Sat</button>
+    </div>
+    <div class="row wrap">
       <button id="generateBtn" class="btn btn-accent btn-lg">Generate schedules</button>
     </div>
     <p class="hint">Pick one or more. All checked criteria count equally — the best schedules balance all of them together.</p>
+    <p class="hint">Schedules with any class on a skipped day are filtered out.</p>
     <div id="generateStatus" class="hint"></div>
   </section>
 
