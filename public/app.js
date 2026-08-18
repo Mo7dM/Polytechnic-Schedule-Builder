@@ -89,11 +89,15 @@ function serializeRequirements() {
   }));
 }
 
+function selectedSortModes() {
+  return [...document.querySelectorAll(".rank-opt input:checked")].map(cb => cb.value);
+}
+
 function saveState() {
   try {
     const data = {
       selectedTerm,
-      sort: $("#sortSelect").value,
+      sort: selectedSortModes(),
       requirements: serializeRequirements(),
     };
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
@@ -108,7 +112,12 @@ function restoreState() {
     saved = JSON.parse(localStorage.getItem(STORE_KEY));
   } catch { saved = null; }
   if (!saved) return;
-  if (saved.sort) $("#sortSelect").value = saved.sort;
+  if (saved.sort) {
+    const modes = Array.isArray(saved.sort) ? saved.sort : [saved.sort];
+    document.querySelectorAll(".rank-opt input").forEach(cb => {
+      cb.checked = modes.includes(cb.value);
+    });
+  }
   if (saved.selectedTerm) selectedTerm = saved.selectedTerm;
   if (Array.isArray(saved.requirements) && saved.requirements.length) {
     requirements = saved.requirements.map(r => ({
@@ -194,6 +203,10 @@ function meetingsOverlap(a, b) {
   const sameDay = a.days.some((d, i) => d && b.days[i]);
   if (!sameDay) return false;
   return a.start < b.end && b.start < a.end;
+}
+
+function hasScheduledMeeting(sec) {
+  return sec.meetings.some(m => m.start != null);
 }
 
 function sectionsConflict(secA, secB) {
@@ -511,17 +524,17 @@ function generateSchedules() {
   const pools = requirements.map(req => {
     if (req.anchor) {
       const s = req.sections.find(sec => sec.crn === req.anchor);
-      return [s];
+      return [s]; // a pinned section is included even if its time is TBA/arranged
     }
+    let candidates = req.sections.filter(s => req.included.has(s.crn));
     if (req.pinDoctor) {
-      // Only sections taught by the pinned doctor are considered.
-      return req.sections.filter(s => req.included.has(s.crn) && s.instructor === req.pinDoctor);
+      candidates = candidates.filter(s => s.instructor === req.pinDoctor);
     }
-    return req.sections.filter(s => req.included.has(s.crn));
+    return candidates.filter(hasScheduledMeeting); // TBA/arranged sections aren't usable unless pinned
   });
 
   if (pools.some(p => p.length === 0)) {
-    $("#generateStatus").textContent = "One of your courses has no sections in play for its current pin — check it above.";
+    $("#generateStatus").textContent = "One of your courses has no timed (non-TBA) sections in play. Pin a specific section to include it even if its time is TBA, or adjust your pins above.";
     setBusy(btn, false);
     return;
   }
@@ -560,8 +573,23 @@ function generateSchedules() {
     return;
   }
 
-  const sortMode = $("#sortSelect").value;
-  const scored = results.map(combo => ({ combo, score: scoreCombo(combo, sortMode) }));
+  const modes = selectedSortModes();
+  if (modes.length === 0) {
+    $("#generateStatus").textContent = "Pick at least one ranking criterion above.";
+    setBusy(btn, false);
+    return;
+  }
+
+  const raw = results.map(combo => modes.map(m => scoreCombo(combo, m)));
+  const mins = modes.map((_, i) => Math.min(...raw.map(r => r[i])));
+  const maxs = modes.map((_, i) => Math.max(...raw.map(r => r[i])));
+  const scored = raw.map((scores, idx) => ({
+    combo: results[idx],
+    score: scores.reduce((acc, s, i) => {
+      const span = maxs[i] - mins[i];
+      return acc + (span > 0 ? (s - mins[i]) / span : 0);
+    }, 0),
+  }));
   scored.sort((a, b) => a.score - b.score);
 
   lastResults = scored.map(s => s.combo);
@@ -858,7 +886,7 @@ $("#findSectionsBtn").onclick = findSections;
 $("#generateBtn").onclick = generateSchedules;
 $("#bannerClose").onclick = dismissBanner;
 $("#copyTextBtn").onclick = copyScheduleText;
-$("#sortSelect").onchange = saveState;
+document.querySelectorAll(".rank-opt input").forEach(cb => cb.addEventListener("change", saveState));
 $("#debugToggle").onclick = toggleDebug;
 document.getElementById("feedbackLink").href = FEEDBACK_URL;
 

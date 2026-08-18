@@ -71,16 +71,15 @@
 
   <section class="panel" id="generatePanel" style="display:none;">
     <h2><span class="step-no">04</span> Build schedules</h2>
-    <div class="row">
-      <label for="sortSelect" class="hint" style="margin:0;">Rank by:</label>
-      <select id="sortSelect">
-        <option value="compact">Fewest gaps between classes</option>
-        <option value="earliest">Earliest finish each day</option>
-        <option value="latest">Latest start each day</option>
-        <option value="fewdays">Fewest days on campus</option>
-      </select>
+    <div class="row wrap">
+      <span class="hint" style="margin:0;">Rank by:</span>
+      <label class="rank-opt"><input type="checkbox" value="compact" checked /> Fewest gaps between classes</label>
+      <label class="rank-opt"><input type="checkbox" value="earliest" /> Earliest finish each day</label>
+      <label class="rank-opt"><input type="checkbox" value="latest" /> Latest start each day</label>
+      <label class="rank-opt"><input type="checkbox" value="fewdays" /> Fewest days on campus</label>
       <button id="generateBtn" class="btn btn-accent btn-lg">Generate schedules</button>
     </div>
+    <p class="hint">Pick one or more. All checked criteria count equally — the best schedules balance all of them together.</p>
     <div id="generateStatus" class="hint"></div>
   </section>
 

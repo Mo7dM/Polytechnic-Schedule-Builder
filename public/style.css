@@ -181,6 +181,24 @@ select:focus, input:focus{
   outline-offset: 2px;
 }
 
+.rank-opt{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid var(--black);
+  background: var(--white);
+  padding: 7px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 2px 2px 0 var(--black);
+  transition: transform .06s linear, box-shadow .06s linear, background .06s linear;
+}
+.rank-opt:hover{ transform: translate(2px, 2px); box-shadow: 0 0 0 var(--black); }
+.rank-opt:has(input:checked){ background: var(--blue); }
+.rank-opt input{ width: 16px; height: 16px; accent-color: var(--black); margin: 0; }
+
 /* ---------- buttons ---------- */
 
 .btn{
