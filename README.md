@@ -17,7 +17,7 @@ the possibilities for everything else around it.
    have it already.
 2. Clone:
    ```
-    git clone https://github.com/Mo7dM/Polytechnic-Schedule-Builder
+    git clone https://github.com/Mo7dM/Polytechnic-Schedule-Builder.git
     cd Polytechnic-Schedule-Builder
    ```
 3. In this folder, run:
