@@ -678,3 +678,5 @@ select:focus, input:focus{
   .schedule-details{ overflow-x: auto; }
   .sd-head, .sd-row{ min-width: 620px; }
 }
+
+.generate-btn-row{ margin-top: 12px; }
