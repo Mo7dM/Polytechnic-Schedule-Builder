@@ -272,8 +272,8 @@ async function loadTerms() {
   if (selectedTerm) {
     if (terms.some(t => t.code === selectedTerm)) sel.value = selectedTerm;
   } else {
-    const preferred = terms.find(t => t.code === "202502");
-    if (preferred) sel.value = "202502";
+    const preferred = terms.find(t => t.code === "202601");
+    if (preferred) sel.value = "202601";
   }
   setSession(true, `${terms.length} terms found`);
 
