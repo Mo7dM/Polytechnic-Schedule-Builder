@@ -78,15 +78,8 @@
       <label class="rank-opt"><input type="checkbox" value="latest" /> Latest start each day</label>
       <label class="rank-opt"><input type="checkbox" value="fewdays" /> Fewest days on campus</label>
     </div>
-    <div class="row wrap day-skip-row">
-      <span class="hint" style="margin:0;">Skip days:</span>
-      <button type="button" class="day-chip" data-day="0">Sun</button>
-      <button type="button" class="day-chip" data-day="1">Mon</button>
-      <button type="button" class="day-chip" data-day="2">Tue</button>
-      <button type="button" class="day-chip" data-day="3">Wed</button>
-      <button type="button" class="day-chip" data-day="4">Thu</button>
-      <button type="button" class="day-chip" data-day="5">Fri</button>
-      <button type="button" class="day-chip" data-day="6">Sat</button>
+    <div class="row wrap" style="margin-top: 10px; align-items: center; gap: 20px;">
+      <label class="rank-opt"><input type="checkbox" id="noBreakCheck" /> No break between classes (&le;10m gap = back-to-back)</label>
     </div>
     <div class="row wrap" style="margin-top: 10px; align-items: center; gap: 20px;">
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -124,6 +117,7 @@
   <section class="panel" id="resultsPanel" style="display:none;">
     <h2><span class="step-no">05</span> Options</h2>
     <div id="resultsMeta" class="hint"></div>
+    <div id="resultsPagination" class="row wrap" style="margin: 10px 0; gap: 8px; align-items: center;"></div>
     <div id="resultsTabs" class="tabs"></div>
     <div id="resultsGrid"></div>
     <div id="tbaNotice" class="tba-notice" hidden></div>

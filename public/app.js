@@ -103,6 +103,11 @@ function getMaxDaysPerWeek() {
   return Number.isNaN(val) ? 0 : val;
 }
 
+function isNoBreakEnabled() {
+  const cb = $("#noBreakCheck");
+  return cb ? cb.checked : false;
+}
+
 function selectedSortModes() {
   return [...document.querySelectorAll(".rank-opt input:checked")].map(cb => cb.value);
 }
@@ -123,6 +128,7 @@ function saveState() {
       skipDays: [...blockedDays()],
       maxClassesPerDay: getMaxClassesPerDay(),
       maxDaysPerWeek: getMaxDaysPerWeek(),
+      noBreak: isNoBreakEnabled(),
       requirements: serializeRequirements(),
     };
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
@@ -140,6 +146,7 @@ function restoreState() {
   if (saved.sort) {
     const modes = Array.isArray(saved.sort) ? saved.sort : [saved.sort];
     document.querySelectorAll(".rank-opt input").forEach(cb => {
+      if (cb.id === "noBreakCheck") return;
       cb.checked = modes.includes(cb.value);
     });
   }
@@ -156,6 +163,10 @@ function restoreState() {
   if (saved.maxDaysPerWeek != null) {
     const sel = $("#maxDaysPerWeekSelect");
     if (sel) sel.value = String(saved.maxDaysPerWeek);
+  }
+  if (saved.noBreak != null) {
+    const cb = $("#noBreakCheck");
+    if (cb) cb.checked = !!saved.noBreak;
   }
   if (Array.isArray(saved.requirements) && saved.requirements.length) {
     requirements = saved.requirements.map(r => ({
@@ -277,6 +288,8 @@ let requirements = []; // {id, subject, courseNumber, courseTitle, sections:[...
 let reqCounter = 0;
 let lastResults = [];
 let currentCombo = null;
+let currentResultsPage = 0;
+const PAGE_SIZE = 20;
 
 // ---------- term & subject loading ---------------------------------------------
 
@@ -583,6 +596,7 @@ function generateSchedules() {
   const skip = blockedDays();
   const maxPerDay = getMaxClassesPerDay();
   const maxDaysWeek = getMaxDaysPerWeek();
+  const noBreakReq = isNoBreakEnabled();
 
   // Pre-check if any individual section violates max classes per day limit on its own
   const pools = requirements.map(req => {
@@ -661,6 +675,24 @@ function generateSchedules() {
         const activeDaysCount = byDay.filter(list => list.length > 0).length;
         if (activeDaysCount > maxDaysWeek) return;
       }
+      // Check no break constraint (if enabled, any real gap > 15m on any campus day is disallowed)
+      if (noBreakReq) {
+        const byDay = dailyIntervals(chosen);
+        const NO_BREAK_LIMIT = 15;
+        let hasForbiddenGap = false;
+        for (const list of byDay) {
+          if (list.length < 2) continue;
+          for (let i = 1; i < list.length; i++) {
+            const gap = list[i].start - list[i - 1].end;
+            if (gap > NO_BREAK_LIMIT) {
+              hasForbiddenGap = true;
+              break;
+            }
+          }
+          if (hasForbiddenGap) break;
+        }
+        if (hasForbiddenGap) return;
+      }
       found.push([...chosen]);
       return;
     }
@@ -679,8 +711,8 @@ function generateSchedules() {
   backtrack(0, []);
 
   if (found.length === 0) {
-    $("#generateStatus").textContent = skip.size || maxPerDay > 0 || maxDaysWeek > 0
-      ? "No combination exists satisfying your skip days, max classes per day, or max days per week limits. Relax your limits or include more sections."
+    $("#generateStatus").textContent = skip.size || maxPerDay > 0 || maxDaysWeek > 0 || noBreakReq
+      ? "No combination exists satisfying your skip days, max classes/day, max days/week, or no break requirements. Relax your limits or include more sections."
       : "No conflict-free combination exists with the current sections/pins. Try un-pinning a class or including more sections.";
     $("#resultsPanel").style.display = "none";
     setBusy(btn, false);
@@ -711,8 +743,10 @@ function generateSchedules() {
   const maxPerDayNote = maxPerDayVal > 0 ? ` — max ${maxPerDayVal} class${maxPerDayVal === 1 ? "" : "es"}/day` : "";
   const maxDaysWeekVal = getMaxDaysPerWeek();
   const maxDaysWeekNote = maxDaysWeekVal > 0 ? ` — max ${maxDaysWeekVal} day${maxDaysWeekVal === 1 ? "" : "s"}/week` : "";
-  $("#generateStatus").textContent = `${found.length} valid combination(s) found${skipNote}${maxPerDayNote}${maxDaysWeekNote}${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
+  const noBreakNote = isNoBreakEnabled() ? ` — no breaks` : "";
+  $("#generateStatus").textContent = `${found.length} valid combination(s) found${skipNote}${maxPerDayNote}${maxDaysWeekNote}${noBreakNote}${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
   setBusy(btn, false);
+  currentResultsPage = 0;
   renderResults();
 }
 
@@ -767,15 +801,60 @@ function scoreCombo(combo, mode) {
 
 function renderResults() {
   $("#resultsPanel").style.display = "block";
-  const shown = lastResults.slice(0, 20);
-  $("#resultsMeta").textContent = `${shown.length} of ${lastResults.length} option(s), best first.`;
+  const totalOptions = lastResults.length;
+  const totalPages = Math.ceil(totalOptions / PAGE_SIZE) || 1;
+  if (currentResultsPage >= totalPages) currentResultsPage = totalPages - 1;
+  if (currentResultsPage < 0) currentResultsPage = 0;
+
+  const startIdx = currentResultsPage * PAGE_SIZE;
+  const pageCombos = lastResults.slice(startIdx, startIdx + PAGE_SIZE);
+
+  $("#resultsMeta").textContent = `${totalOptions} option(s) found. Showing page ${currentResultsPage + 1} of ${totalPages} (${pageCombos.length} options on this page), best first.`;
+
+  // Render pagination buttons
+  const paginationContainer = $("#resultsPagination");
+  if (paginationContainer) {
+    paginationContainer.innerHTML = "";
+    if (totalPages > 1) {
+      const prevBtn = document.createElement("button");
+      prevBtn.className = "btn btn-white btn-small";
+      prevBtn.textContent = "← Prev page";
+      prevBtn.disabled = currentResultsPage === 0;
+      prevBtn.onclick = () => {
+        if (currentResultsPage > 0) {
+          currentResultsPage--;
+          renderResults();
+        }
+      };
+      paginationContainer.appendChild(prevBtn);
+
+      const pageIndicator = document.createElement("span");
+      pageIndicator.className = "hint";
+      pageIndicator.style.margin = "0 8px";
+      pageIndicator.textContent = `Page ${currentResultsPage + 1} of ${totalPages}`;
+      paginationContainer.appendChild(pageIndicator);
+
+      const nextBtn = document.createElement("button");
+      nextBtn.className = "btn btn-white btn-small";
+      nextBtn.textContent = "Next page →";
+      nextBtn.disabled = currentResultsPage >= totalPages - 1;
+      nextBtn.onclick = () => {
+        if (currentResultsPage < totalPages - 1) {
+          currentResultsPage++;
+          renderResults();
+        }
+      };
+      paginationContainer.appendChild(nextBtn);
+    }
+  }
 
   const tabs = $("#resultsTabs");
   tabs.innerHTML = "";
-  shown.forEach((combo, i) => {
+  pageCombos.forEach((combo, i) => {
+    const globalIdx = startIdx + i;
     const b = document.createElement("button");
     b.className = "tab-btn" + (i === 0 ? " active" : "");
-    b.textContent = `Option ${i + 1} · ${daysLabel(combo)} · ${creditsLabel(combo)}`;
+    b.textContent = `Option ${globalIdx + 1} · ${daysLabel(combo)} · ${creditsLabel(combo)}`;
     b.onclick = () => {
       [...tabs.children].forEach(c => c.classList.remove("active"));
       b.classList.add("active");
@@ -783,7 +862,7 @@ function renderResults() {
     };
     tabs.appendChild(b);
   });
-  if (shown.length) drawWeekGrid(shown[0]);
+  if (pageCombos.length) drawWeekGrid(pageCombos[0]);
 }
 
 function courseKey(sec) {
@@ -1013,7 +1092,13 @@ $("#findSectionsBtn").onclick = findSections;
 $("#generateBtn").onclick = generateSchedules;
 $("#bannerClose").onclick = dismissBanner;
 $("#copyTextBtn").onclick = copyScheduleText;
-document.querySelectorAll(".rank-opt input").forEach(cb => cb.addEventListener("change", saveState));
+document.querySelectorAll(".rank-opt input").forEach(cb => {
+  if (cb.id === "noBreakCheck") {
+    cb.addEventListener("change", saveState);
+  } else {
+    cb.addEventListener("change", saveState);
+  }
+});
 const maxClassesSelect = $("#maxClassesPerDaySelect");
 if (maxClassesSelect) {
   maxClassesSelect.addEventListener("change", saveState);
