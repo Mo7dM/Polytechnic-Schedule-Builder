@@ -88,6 +88,31 @@
       <button type="button" class="day-chip" data-day="5">Fri</button>
       <button type="button" class="day-chip" data-day="6">Sat</button>
     </div>
+    <div class="row wrap" style="margin-top: 10px; align-items: center; gap: 20px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="hint" style="margin:0;">Max classes per day:</span>
+        <select id="maxClassesPerDaySelect" style="padding: 6px 10px; box-shadow: 2px 2px 0 var(--black);">
+          <option value="0">No limit</option>
+          <option value="1">1 class max</option>
+          <option value="2" selected>2 classes max</option>
+          <option value="3">3 classes max</option>
+          <option value="4">4 classes max</option>
+          <option value="5">5 classes max</option>
+        </select>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="hint" style="margin:0;">Max days per week:</span>
+        <select id="maxDaysPerWeekSelect" style="padding: 6px 10px; box-shadow: 2px 2px 0 var(--black);">
+          <option value="0" selected>No limit</option>
+          <option value="1">1 day max</option>
+          <option value="2">2 days max</option>
+          <option value="3">3 days max</option>
+          <option value="4">4 days max</option>
+          <option value="5">5 days max</option>
+          <option value="6">6 days max</option>
+        </select>
+      </div>
+    </div>
     <div class="row wrap generate-btn-row">
       <button id="generateBtn" class="btn btn-accent btn-lg">Generate schedules</button>
     </div>

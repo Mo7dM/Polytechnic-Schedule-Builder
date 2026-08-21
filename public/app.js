@@ -89,6 +89,20 @@ function serializeRequirements() {
   }));
 }
 
+function getMaxClassesPerDay() {
+  const sel = $("#maxClassesPerDaySelect");
+  if (!sel) return 0;
+  const val = parseInt(sel.value, 10);
+  return Number.isNaN(val) ? 0 : val;
+}
+
+function getMaxDaysPerWeek() {
+  const sel = $("#maxDaysPerWeekSelect");
+  if (!sel) return 0;
+  const val = parseInt(sel.value, 10);
+  return Number.isNaN(val) ? 0 : val;
+}
+
 function selectedSortModes() {
   return [...document.querySelectorAll(".rank-opt input:checked")].map(cb => cb.value);
 }
@@ -107,6 +121,8 @@ function saveState() {
       selectedTerm,
       sort: selectedSortModes(),
       skipDays: [...blockedDays()],
+      maxClassesPerDay: getMaxClassesPerDay(),
+      maxDaysPerWeek: getMaxDaysPerWeek(),
       requirements: serializeRequirements(),
     };
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
@@ -132,6 +148,14 @@ function restoreState() {
     document.querySelectorAll(".day-chip").forEach(chip => {
       chip.classList.toggle("off", saved.skipDays.includes(Number(chip.dataset.day)));
     });
+  }
+  if (saved.maxClassesPerDay != null) {
+    const sel = $("#maxClassesPerDaySelect");
+    if (sel) sel.value = String(saved.maxClassesPerDay);
+  }
+  if (saved.maxDaysPerWeek != null) {
+    const sel = $("#maxDaysPerWeekSelect");
+    if (sel) sel.value = String(saved.maxDaysPerWeek);
   }
   if (Array.isArray(saved.requirements) && saved.requirements.length) {
     requirements = saved.requirements.map(r => ({
@@ -557,30 +581,49 @@ function generateSchedules() {
   $("#generateStatus").textContent = "Building&hellip;";
 
   const skip = blockedDays();
+  const maxPerDay = getMaxClassesPerDay();
+  const maxDaysWeek = getMaxDaysPerWeek();
 
+  // Pre-check if any individual section violates max classes per day limit on its own
   const pools = requirements.map(req => {
     if (req.anchor) {
       const s = req.sections.find(sec => sec.crn === req.anchor);
-      if (s && skip.size) {
-        // A pinned section still respects skipped days.
-        for (const d of skip) if (sectionMeetsOn(s, d)) return [];
+      if (s) {
+        if (skip.size) {
+          for (const d of skip) if (sectionMeetsOn(s, d)) return [];
+        }
+        if (maxPerDay > 0) {
+          for (let d = 0; d < 7; d++) {
+            const count = s.meetings.filter(m => m.start != null && m.days[d]).length;
+            if (count > maxPerDay) return [];
+          }
+        }
       }
-      return [s]; // a pinned section is included even if its time is TBA/arranged
+      return [s];
     }
     let candidates = req.sections.filter(s => req.included.has(s.crn));
     if (req.pinDoctor) {
       candidates = candidates.filter(s => s.instructor === req.pinDoctor);
     }
-    candidates = candidates.filter(hasScheduledMeeting); // TBA/arranged sections aren't usable unless pinned
+    candidates = candidates.filter(hasScheduledMeeting);
     if (skip.size) {
       candidates = candidates.filter(s => ![...skip].some(d => sectionMeetsOn(s, d)));
+    }
+    if (maxPerDay > 0) {
+      candidates = candidates.filter(s => {
+        for (let d = 0; d < 7; d++) {
+          const count = s.meetings.filter(m => m.start != null && m.days[d]).length;
+          if (count > maxPerDay) return false;
+        }
+        return true;
+      });
     }
     return candidates;
   });
 
   if (pools.some(p => p.length === 0)) {
-    $("#generateStatus").textContent = skip.size
-      ? "Every option for one of your courses falls on a skipped day. Clear a skipped day or pin a section that works around it."
+    $("#generateStatus").textContent = skip.size || maxPerDay > 0
+      ? "Every option for one of your courses violates your skip days or max classes per day limit. Adjust your filters or pins."
       : "One of your courses has no timed (non-TBA) sections in play. Pin a specific section to include it even if its time is TBA, or adjust your pins above.";
     setBusy(btn, false);
     return;
@@ -593,9 +636,6 @@ function generateSchedules() {
     return;
   }
 
-  // Collect every conflict-free combo found (bounded only by exploration work),
-  // then keep the best KEEP by the primary criterion so a good combo is never
-  // dropped just because it was explored after 300 worse ones.
   const found = [];
   const MAX_EXPLORED = 200000;
   let explored = 0;
@@ -604,6 +644,23 @@ function generateSchedules() {
     if (explored > MAX_EXPLORED) return;
     explored += 1;
     if (idx === pools.length) {
+      // Check max classes per day limit across the combined schedule
+      if (maxPerDay > 0) {
+        const dayCounts = Array(7).fill(0);
+        for (const sec of chosen) {
+          for (let d = 0; d < 7; d++) {
+            const matches = sec.meetings.filter(m => m.start != null && m.days[d]).length;
+            dayCounts[d] += matches;
+          }
+        }
+        if (dayCounts.some(c => c > maxPerDay)) return;
+      }
+      // Check max days per week limit across the combined schedule
+      if (maxDaysWeek > 0) {
+        const byDay = dailyIntervals(chosen);
+        const activeDaysCount = byDay.filter(list => list.length > 0).length;
+        if (activeDaysCount > maxDaysWeek) return;
+      }
       found.push([...chosen]);
       return;
     }
@@ -622,8 +679,8 @@ function generateSchedules() {
   backtrack(0, []);
 
   if (found.length === 0) {
-    $("#generateStatus").textContent = blockedDays().size
-      ? "No conflict-free combination exists avoiding your skipped days. Clear a skipped day or include more sections."
+    $("#generateStatus").textContent = skip.size || maxPerDay > 0 || maxDaysWeek > 0
+      ? "No combination exists satisfying your skip days, max classes per day, or max days per week limits. Relax your limits or include more sections."
       : "No conflict-free combination exists with the current sections/pins. Try un-pinning a class or including more sections.";
     $("#resultsPanel").style.display = "none";
     setBusy(btn, false);
@@ -650,7 +707,11 @@ function generateSchedules() {
 
   lastResults = scored.map(s => s.combo);
   const skipNote = blockedDays().size ? ` — skipping ${[...blockedDays()].map(d => DAY_KEYS[d]).join(", ")}` : "";
-  $("#generateStatus").textContent = `${found.length} valid combination(s) found${skipNote}${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
+  const maxPerDayVal = getMaxClassesPerDay();
+  const maxPerDayNote = maxPerDayVal > 0 ? ` — max ${maxPerDayVal} class${maxPerDayVal === 1 ? "" : "es"}/day` : "";
+  const maxDaysWeekVal = getMaxDaysPerWeek();
+  const maxDaysWeekNote = maxDaysWeekVal > 0 ? ` — max ${maxDaysWeekVal} day${maxDaysWeekVal === 1 ? "" : "s"}/week` : "";
+  $("#generateStatus").textContent = `${found.length} valid combination(s) found${skipNote}${maxPerDayNote}${maxDaysWeekNote}${explored > MAX_EXPLORED ? " (search capped — narrowing your options gives a full count)" : ""}.`;
   setBusy(btn, false);
   renderResults();
 }
@@ -953,6 +1014,14 @@ $("#generateBtn").onclick = generateSchedules;
 $("#bannerClose").onclick = dismissBanner;
 $("#copyTextBtn").onclick = copyScheduleText;
 document.querySelectorAll(".rank-opt input").forEach(cb => cb.addEventListener("change", saveState));
+const maxClassesSelect = $("#maxClassesPerDaySelect");
+if (maxClassesSelect) {
+  maxClassesSelect.addEventListener("change", saveState);
+}
+const maxDaysSelect = $("#maxDaysPerWeekSelect");
+if (maxDaysSelect) {
+  maxDaysSelect.addEventListener("change", saveState);
+}
 document.querySelectorAll(".day-chip").forEach(chip => chip.addEventListener("click", () => {
   chip.classList.toggle("off");
   saveState();
